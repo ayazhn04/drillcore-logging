@@ -1,0 +1,38 @@
+# Tiny settings for the synthetic end-to-end smoke test (CPU, about a minute).
+# Used by `corelog smoke-test` and tests/ (synthetic data only); data_root/output_root are set by the command.
+labels:
+  classes: [syn_class_1, syn_class_2, syn_class_3, non_core]   # synthetic, not geological
+  class_map: {S1: syn_class_1, S2: syn_class_2, S3: syn_class_3, NC: non_core}
+
+features:
+  gabor:
+    frequencies: [0.09, 0.17, 0.3]
+  color:
+    pca_components: 8
+
+som:
+  grid: [4, 4]
+  iterations: 3000
+  thumbnails_per_node: 4
+
+split:
+  mode: holes
+  train_holes: [SYN_A, SYN_B]
+  val_holes: [SYN_C]
+  test_holes: [SYN_D]
+
+train:
+  device: cpu
+  epochs: 2
+  lr: 1.0e-3
+  batch_size: 8
+  num_workers: 0
+  patience: 5
+  max_steps_per_epoch: 4
+
+mean_teacher:
+  unlabeled_batch_size: 8
+  rampup_epochs: 1
+
+evaluation:
+  bootstrap: 50

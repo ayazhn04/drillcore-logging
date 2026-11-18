@@ -1,0 +1,25 @@
+# Copy to configs/lab.yaml (git-ignored) on the lab machine and edit.
+# Usage: corelog <command> --config configs/lab.yaml [--config configs/experiments/xyz.yaml]
+
+paths:
+  data_root: /data/drillcore/2026_dataset      # folder from the RAs (see docs/DATASET_MANIFEST.md)
+  output_root: /data/drillcore/outputs         # big disk; never inside the git checkout
+
+labels:
+  classes: [lithology_1, lithology_2, lithology_3, non_core]   # agree with geologists (plan P0)
+  class_map:
+    # raw journal code: model class
+    GRN: lithology_1
+    SCH: lithology_2
+    QV: lithology_3
+    NC: non_core
+
+split:
+  mode: holes
+  train_holes: [HOLE_B, HOLE_C]
+  val_holes: [HOLE_D]
+  test_holes: [HOLE_A]
+
+train:
+  device: cuda
+  num_workers: 8

@@ -1,0 +1,11 @@
+# Exact pins for direct, non-PyTorch dependencies (verified on Python 3.12, 2026-11-18).
+# Install PyTorch FIRST from the right index (see docs/INSTALL.md), then: pip install -r requirements/base.txt -e .
+numpy==2.5.5
+scipy==1.18.1
+scikit-image==0.26.0
+scikit-learn==1.9.1
+pandas==3.1.1
+MiniSom==2.3.6
+PyYAML==6.0.3
+pillow==13.0.0
+pytest==9.2.0

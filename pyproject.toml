@@ -1,0 +1,37 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "corelog"
+version = "0.1.0"
+description = "Weakly supervised drill-core photograph classification and depth-indexed geological logging (clean-room reimplementation of the Serdoun et al. 2026 workflow)."
+readme = "README.md"
+requires-python = ">=3.10,<3.14"
+dependencies = [
+  "numpy>=1.26",
+  "scipy>=1.11",
+  "scikit-image>=0.22",
+  "scikit-learn>=1.5",  # PCA svd_solver="covariance_eigh"
+  "pandas>=2.1",
+  "minisom>=2.3.2",
+  "pyyaml>=6.0",
+  "pillow>=10.0",
+  "torch>=2.2",
+  "torchvision>=0.17",
+]
+
+[project.optional-dependencies]
+raw = ["rawpy>=0.19"]          # read Canon .CR2 directly (otherwise convert to TIFF/JPEG first)
+dev = ["pytest>=8"]
+
+[project.scripts]
+corelog = "corelog.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+markers = ["slow: end-to-end smoke tests (still CPU-only, ~1 min)"]

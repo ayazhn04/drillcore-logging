@@ -1,0 +1,107 @@
+# Base configuration. Every key can be overridden by another YAML file (--config)
+# or on the command line (--set section.key=value). Do NOT put machine-specific
+# paths here: use configs/lab.yaml (git-ignored, copy lab.example.yaml) or env vars.
+
+project:
+  name: drillcore-logging
+  seed: 42
+
+paths:
+  data_root: null                 # REQUIRED: folder prepared by the RAs (see docs/DATASET_MANIFEST.md)
+  output_root: outputs            # generated tiles, features, runs (git-ignored)
+  rows_manifest: manifests/rows.csv          # relative to data_root
+  log_intervals: manifests/log_intervals.csv # relative to data_root
+
+tiling:
+  tile_height: 60                 # paper: 60 px
+  tile_width: 300                 # paper: 300 px (~18 cm on NQ core photographed at that scale)
+  stride: 300                     # = tile_width -> no overlap (overlap leaks into evaluation; audit T4e)
+  min_last_fraction: 0.5          # keep a trailing partial window if >= this fraction (shifted back, no padding)
+  trim_fraction: 0.0              # trim this fraction of row length at each end (paper: 0.05 per photo side)
+  image_format: png
+
+labels:
+  # Fixed, ordered list of model classes -> stable class indices (audit DL-3).
+  classes: [class_a, class_b, class_c, non_core]
+  # Map raw lithology codes from the geological journals to model classes.
+  # Codes not listed here are reported by `corelog validate` and treated as unlabeled.
+  class_map: {}
+  min_purity: 0.8                 # a tile gets a log label only if >= 80 % of its depth span has that class
+  unlabeled: unlabeled
+
+features:
+  gabor:
+    # Paper Eq. 5 (complex convolution, then modulus). Frequencies kept below Nyquist (0.5).
+    frequencies: [0.05, 0.09, 0.17, 0.3, 0.45]
+    thetas_deg: [0, 45, 90, 135]
+    boundary: reflect             # authors used 'wrap' (seam artefacts; audit FE-6)
+    minmax_normalize: false       # authors' per-image min-max; off by default
+  color:
+    bins: 8                       # 8x8x8 = 512-bin RGB histogram
+    normalize: minmax             # none | minmax (paper text) | equalize (authors' code)
+    pca_components: 48            # paper: 48
+  n_jobs: 1
+
+som:
+  grid: [10, 10]
+  sigma: 1.25
+  learning_rate: 0.01
+  iterations: 5000000             # paper; reduce for quick looks
+  random_order: true              # authors' code used sequential (depth-ordered) training
+  init: pca                       # MiniSom pca_weights_init (reproducible)
+  thumbnails_per_node: 12
+  vote_min_labelers: 1            # majority vote across labelers' CSVs; ties -> unlabeled
+
+split:
+  mode: holes                     # holes | leave_one_hole_out | random (random only for comparison)
+  train_holes: []
+  val_holes: []
+  test_holes: []
+  fold: 0                         # for leave_one_hole_out: index of the held-out test hole
+  label_source: log               # log | som | log_then_som
+
+model:
+  name: baseline                  # baseline | vgg16
+  head: paper                     # baseline only: paper (Fig. 8) | notebook (+2 x Dense128)
+  dropout: 0.5
+  vgg_weights: imagenet           # imagenet | none  (imagenet downloads ~530 MB once)
+  vgg_freeze_features: true       # paper: only FC layers trained
+  input_size: [60, 300]           # paper text says VGG used 224x224; authors' code used 60x300
+
+train:
+  device: auto                    # auto | cpu | cuda | mps
+  epochs: 1000
+  lr: 1.0e-5                      # paper
+  weight_decay: 0.0
+  batch_size: 16
+  batch_growth_factor: 2          # "increase the batch size" schedule (Smith et al. 2018)
+  batch_growth_every: 20          # epochs
+  max_batch_size: 512
+  patience: 20                    # early stopping on validation loss; best weights restored
+  num_workers: 2
+  class_weighting: none           # none | balanced
+  augment:
+    gaussian_noise_std: 0.02      # on [0, 1] images
+    hflip: true
+    vflip: true
+    brightness: 0.2
+    contrast: 0.2
+  max_steps_per_epoch: null       # debugging / smoke tests only
+
+mean_teacher:
+  enabled: false
+  unlabeled_batch_size: 48
+  consistency_max: 10.0           # paper: lambda -> 10
+  rampup_epochs: 20               # paper
+  ema_decay_rampup: 0.99          # paper
+  ema_decay: 0.999                # paper
+  evaluate: teacher               # teacher | student (early stopping + saved model)
+
+evaluation:
+  exclude_classes_for_summary: [non_core]
+  bootstrap: 1000
+
+inference:
+  smoothing_window_tiles: 1       # moving average of class probabilities along depth (1 = none)
+  non_core_policy: second_best    # second_best (paper Fig. 16) | keep | drop
+  min_interval_m: 0.0             # merge predicted intervals shorter than this into neighbours

@@ -1,0 +1,3 @@
+# Ablation: baseline with the authors' code head (2 x Dense128) instead of the paper's Fig. 8 head.
+model:
+  head: notebook

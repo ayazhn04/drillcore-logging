@@ -1,0 +1,6 @@
+# VGG16 transfer learning as described in the paper text: 224x224 input, frozen conv base.
+model:
+  name: vgg16
+  input_size: [224, 224]
+  vgg_weights: imagenet
+  vgg_freeze_features: true

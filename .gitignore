@@ -1,0 +1,44 @@
+# --- Never commit company data, raw photos, credentials or generated artefacts ---
+# Anchored to the repo root (a bare 'data/' would also hide the source package src/corelog/data/)
+/data/
+/outputs/
+/runs/
+*.CR2
+*.cr2
+*.CR3
+*.NEF
+*.DNG
+*.tif
+*.tiff
+*.jpg
+*.jpeg
+*.png
+!docs/img/*.png
+*.npy
+*.npz
+*.pt
+*.pth
+*.ckpt
+*.joblib
+*.pkl
+.env
+.env.*
+*.key
+*.pem
+credentials*
+secrets*
+
+# Local configs with machine-specific paths (copy from configs/lab.example.yaml)
+configs/local*.yaml
+configs/lab.yaml
+
+# Python / tooling
+.venv/
+venv/
+__pycache__/
+*.egg-info/
+.pytest_cache/
+.ipynb_checkpoints/
+.DS_Store
+build/
+dist/

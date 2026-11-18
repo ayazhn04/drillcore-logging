@@ -1,0 +1,19 @@
+name: tests
+on: [push, pull_request]
+jobs:
+  cpu-tests:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install (CPU PyTorch + pinned deps)
+        run: |
+          pip install torch==2.15.0 torchvision==0.29.2 --index-url https://download.pytorch.org/whl/cpu
+          pip install -r requirements/base.txt
+          pip install -e .
+      - name: Tests (synthetic data only)
+        run: pytest
+      - name: CLI smoke test
+        run: corelog smoke-test

@@ -1,0 +1,5 @@
+# Mean Teacher with the paper's schedule (lambda -> 10 over 20 epochs, EMA 0.99 -> 0.999).
+mean_teacher:
+  enabled: true
+  consistency_max: 10.0
+  rampup_epochs: 20
