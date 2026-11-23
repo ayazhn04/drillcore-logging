@@ -29,6 +29,8 @@ from .manifest import BBOX, mask_path_for, read_rows
 
 TILES_CSV = "tiles/tiles.csv"
 DROPPED_CSV = "tiles/dropped_tiles.csv"
+ROWS_TILING_CSV = "tiles/rows_tiling.csv"  # one line per manifest row: geometry, tiles made/kept, rock coverage
+TILING_RUN_JSON = "tiles/tiling_run.json"  # tile geometry of this run, written even when no tile is produced
 
 
 def _safe(s: str) -> str:
@@ -41,9 +43,10 @@ def slice_id(hole: str, photo: str, row: str, k: int) -> str:
 
 def tile_row_masked(img: np.ndarray, mask: np.ndarray | None, depth_from: float, depth_to: float,
                     tile_h: int, tile_w: int, stride: int, min_last_fraction: float = 0.5,
-                    trim_fraction: float = 0.0, direction: str = "ltr"):
+                    trim_fraction: float = 0.0, direction: str = "ltr", info: dict | None = None):
     """Like tile_row, plus the mask (bool H, W) transformed identically.
-    Returns [(tile, mask_tile | None, depth_from_m, depth_to_m), ...]."""
+    Returns [(tile, mask_tile | None, depth_from_m, depth_to_m), ...]. If `info` is a dict it
+    receives the resized row width (`scaled_w`), window starts and per-column rock pixels."""
     if mask is not None and mask.shape[:2] != img.shape[:2]:
         raise ValueError(f"mask shape {mask.shape[:2]} differs from image shape {img.shape[:2]}")
     if direction == "rtl":
@@ -68,6 +71,8 @@ def tile_row_masked(img: np.ndarray, mask: np.ndarray | None, depth_from: float,
     end_covered = (starts[-1] + tile_w) if starts else 0
     if new_w - end_covered >= min_last_fraction * tile_w and new_w >= tile_w:
         starts.append(new_w - tile_w)
+    if info is not None:
+        info.update(scaled_w=new_w, starts=starts, rock_cols=None if mrow is None else mrow.sum(0))
     return [(row[:, s:s + tile_w], None if mrow is None else mrow[:, s:s + tile_w],
              depth_from + s * m_per_px, depth_from + (s + tile_w) * m_per_px) for s in starts]
 
@@ -93,7 +98,8 @@ def make_tiles(cfg: dict, write_images: bool = True) -> pd.DataFrame:
         rows = rows[rows["exclude"] == 0]
     out_root = output_root(cfg)
     template, min_rock = t.get("mask_template"), float(t.get("min_rock_fraction", 0.0) or 0.0)
-    recs, dropped, cache_path, cache_img = [], [], None, None
+    recs, dropped, row_stats, cache_path, cache_img = [], [], [], None, None
+    tw = t["tile_width"]
     for _, r in rows.sort_values(["image_path"]).iterrows():
         p = data_root(cfg) / r["image_path"]
         if p != cache_path:
@@ -105,10 +111,14 @@ def make_tiles(cfg: dict, write_images: bool = True) -> pd.DataFrame:
             x0, y0, x1, y1 = (int(r[c]) for c in BBOX)
             img = img[y0:y1, x0:x1]
             mask = None if mask is None else mask[y0:y1, x0:x1]
+        info: dict = {}
         pieces = tile_row_masked(img, mask, float(r["depth_from_m"]), float(r["depth_to_m"]),
-                                 t["tile_height"], t["tile_width"], t["stride"],
+                                 t["tile_height"], tw, t["stride"],
                                  t.get("min_last_fraction", 0.5), t.get("trim_fraction", 0.0),
-                                 r.get("direction", "ltr") if isinstance(r.get("direction", "ltr"), str) else "ltr")
+                                 r.get("direction", "ltr") if isinstance(r.get("direction", "ltr"), str) else "ltr",
+                                 info=info)
+        kept_cols = np.zeros(info["scaled_w"], bool)
+        n_kept = 0
         for k, (tile, mtile, d0, d1) in enumerate(pieces):
             sid = slice_id(r["hole_id"], r["photo_id"], r["row_id"], k)
             rock = float(mtile.mean()) if mtile is not None else float("nan")
@@ -118,6 +128,8 @@ def make_tiles(cfg: dict, write_images: bool = True) -> pd.DataFrame:
             if mtile is not None and rock < min_rock:
                 dropped.append(rec)
                 continue
+            n_kept += 1
+            kept_cols[info["starts"][k]:info["starts"][k] + tw] = True
             rel = Path("tiles") / _safe(r["hole_id"]) / f"{sid}.{t.get('image_format', 'png')}"
             mrel = Path("tiles") / _safe(r["hole_id"]) / f"{sid}_mask.png" if mtile is not None else None
             if write_images:
@@ -125,8 +137,29 @@ def make_tiles(cfg: dict, write_images: bool = True) -> pd.DataFrame:
                 if mrel is not None:
                     Image.fromarray(mtile.astype(np.uint8) * 255).save(out_root / mrel)
             recs.append({**rec, "tile_path": rel.as_posix(), "mask_path": mrel.as_posix() if mrel else ""})
+        rc = info["rock_cols"]
+        row_stats.append({
+            "hole_id": r["hole_id"], "photo_id": r["photo_id"], "row_id": r["row_id"],
+            "height_px": img.shape[0], "width_px": img.shape[1], "aspect": round(img.shape[1] / img.shape[0], 3),
+            "depth_from_m": float(r["depth_from_m"]), "depth_to_m": float(r["depth_to_m"]),
+            "scaled_width_px": info["scaled_w"], "n_windows": len(pieces), "n_kept": n_kept,
+            "n_dropped_low_rock": len(pieces) - n_kept,
+            # share of the row's rock (resized mask) that lies inside kept tiles; NaN without masks
+            "rock_px_row": int(rc.sum()) if rc is not None else np.nan,
+            "rock_covered_fraction": round(float(rc[kept_cols].sum() / rc.sum()), 4)
+            if rc is not None and rc.sum() else np.nan})
+    rs = pd.DataFrame(row_stats)
+    out_root.joinpath("tiles").mkdir(parents=True, exist_ok=True)
+    rs.to_csv(out_root / ROWS_TILING_CSV, index=False)
+    import json
+    (out_root / TILING_RUN_JSON).write_text(json.dumps(
+        {"tile_px": [t["tile_height"], tw], "stride": t["stride"], "min_rock_fraction": min_rock,
+         "rows": len(rs), "tiles_kept": len(recs), "tiles_dropped_low_rock": len(dropped)}, indent=2))
     if not recs:
-        raise ValueError("no tiles produced: rows shorter than one tile, or all below tiling.min_rock_fraction")
+        raise ValueError(_no_tiles_message(rs, t, len(dropped), min_rock))
+    n_zero = int((rs["n_kept"] == 0).sum()) if len(rs) else 0
+    if n_zero:
+        print(f"[make-tiles] {n_zero} of {len(rs)} rows produced no kept tile (see {ROWS_TILING_CSV})")
     df = pd.DataFrame(recs).sort_values(["hole_id", "depth_from_m"]).reset_index(drop=True)
     if df["slice_id"].duplicated().any():
         raise ValueError("duplicate slice_id: check photo_id/row_id uniqueness in rows.csv")
@@ -136,6 +169,24 @@ def make_tiles(cfg: dict, write_images: bool = True) -> pd.DataFrame:
     pd.DataFrame(dropped, columns=[c for c in df.columns if c not in ("tile_path", "mask_path")]).to_csv(
         out_root / DROPPED_CSV, index=False)
     return df
+
+
+def _no_tiles_message(rs: pd.DataFrame, t: dict, n_dropped: int, min_rock: float) -> str:
+    th, tw = t["tile_height"], t["tile_width"]
+    need = tw / th
+    if rs.empty:
+        return "no tiles produced: rows.csv has no active rows (all excluded?)"
+    short = int((rs["scaled_width_px"] < tw).sum())
+    msg = [f"no tiles produced from {len(rs)} rows with tile {th} x {tw} px (height x width).",
+           f"Each row is resized to {th} px high, so a row must be at least {need:.2f}x longer than high "
+           f"to give one tile; row length/height here: median {rs['aspect'].median():.2f}, "
+           f"max {rs['aspect'].max():.2f}; {short} rows are too short."]
+    if n_dropped:
+        msg.append(f"{n_dropped} tiles were dropped by tiling.min_rock_fraction={min_rock}.")
+    msg.append("Per-row details: " + ROWS_TILING_CSV + " under paths.output_root. Options: the alternative "
+               "geometry (--config configs/experiments/tiles_128.yaml with its own output_root), a smaller "
+               "tiling.tile_width, or a lower tiling.min_rock_fraction.")
+    return " ".join(msg)
 
 
 def read_tiles(cfg: dict) -> pd.DataFrame:

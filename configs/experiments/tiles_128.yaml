@@ -1,0 +1,12 @@
+# OPTIONAL alternative tile geometry (128 x 128 px). The paper-reference geometry is 60 x 300
+# (configs/base.yaml) and stays the default until real row dimensions and px/m are inspected.
+# Always pair this with its own output folder so the two tile sets never mix, e.g.
+#   corelog make-tiles -c configs/lab.yaml -c configs/experiments/tiles_128.yaml \
+#       --set paths.output_root=<OUT_ROOT>_t128
+tiling:
+  tile_height: 128
+  tile_width: 128
+  stride: 128            # = tile_width: no overlap
+
+model:
+  input_size: [128, 128]

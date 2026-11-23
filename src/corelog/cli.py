@@ -7,6 +7,7 @@ Typical lab sequence (see docs/WORKFLOW.md):
   corelog make-tiles      -c configs/lab.yaml
   corelog make-labels     -c configs/lab.yaml
   corelog inspect         -c configs/lab.yaml     (class x hole x split counts, rock fraction)
+  corelog compare-tiling  OUT_60x300 OUT_128      (after inspect in each output root)
   corelog train           -c configs/lab.yaml [--mean-teacher]
   corelog evaluate        -c configs/lab.yaml outputs/runs/<run>
   corelog predict-log     -c configs/lab.yaml outputs/runs/<run> [--holes H1 H2]
@@ -85,9 +86,23 @@ def cmd_inspect(a):
     print(f"report written to {r['report']}")
 
 
+def cmd_compare_tiling(a):
+    from .diagnostics import compare_tiling
+    table = compare_tiling(a.output_roots)
+    print(table)
+    if a.out:
+        Path(a.out).parent.mkdir(parents=True, exist_ok=True)
+        Path(a.out).write_text(table + "\n", encoding="utf-8")
+        print(f"written to {a.out}")
+
+
 def cmd_tiles(a):
     from .tiling import make_tiles
-    df = make_tiles(_cfg(a))
+    try:
+        df = make_tiles(_cfg(a))
+    except ValueError as e:
+        print(f"[make-tiles] FAILED: {e}", file=sys.stderr)
+        return 1
     print(f"{len(df)} tiles from {df['hole_id'].nunique()} holes")
 
 
@@ -232,6 +247,10 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--min-intervals", type=int, default=3)
     s.add_argument("--sheets", type=int, default=0, metavar="N",
                    help="write reports/tile_sheets/<label>.png with N random tiles per label")
+    s = sub.add_parser("compare-tiling", help="compare tiling summaries of several output roots (after inspect)")
+    s.add_argument("output_roots", nargs="+", help="paths.output_root of each tiling run")
+    s.add_argument("--out", help="also write the table to this file")
+    s.set_defaults(fn=cmd_compare_tiling)
     add("extract-features", cmd_features, "Gabor + colour descriptors for SOM")
     add("som-train", cmd_som_train, "train the SOM and assign tiles to nodes")
     add("som-sheets", cmd_som_sheets, "export node contact sheets + labelling template")

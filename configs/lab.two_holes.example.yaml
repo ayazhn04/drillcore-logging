@@ -20,7 +20,8 @@ tiling:
   # Rows are already cropped (x0..y1 empty). Masks: masks/<hole>/<row>_mask.png beside photos/<hole>/<row>.png
   mask_template: "masks/{image_subdir}/{image_stem}_mask.png"
   min_rock_fraction: 0.3        # PILOT VALUE: check the rock-fraction quantiles from `corelog inspect`
-  tile_height: 60               # paper geometry; compare with a larger tile in the pilot (see runbook)
+  tile_height: 60               # paper-reference geometry (default). Optional alternative:
+                                # configs/experiments/tiles_128.yaml, compared in runbook section 5b
   tile_width: 300
   stride: 300
 

@@ -73,8 +73,8 @@ All tests use **synthetic data only** (`corelog.synthetic`: 4 synthetic holes SY
 
 ### Stage 5: Rock-only deliveries and two-hole splits
 *Added 2026-11-23, after reading the RAs' delivery documentation. No real data was used; the delivery itself was not available on the development laptop.*
-- **Files:** `manifest.py` (masks, BOM, per-row box completeness, empty codes, metres per class and hole, row scale check), `tiling.py` (mask-aware tiling, `rock_fraction`, `min_rock_fraction`, `dropped_tiles.csv`), `labels.py` (`contact_buffer_m`), `features/descriptors.py` (`use_mask`), `splits.py` (`val_from_train`, two-hole leave-one-hole-out), `evaluate.py` (depth-block bootstrap, `label_counts`, within-hole validation note), `diagnostics.py` + `corelog inspect`, `synthetic.make_rock_only_dataset`, `configs/lab.two_holes.example.yaml`, `configs/rock_only_synthetic.yaml`, `docs/LAB_RUNBOOK.md`
-- **Tests:** `tests/test_stage5_rock_only_two_holes.py` (14 tests, synthetic rock-only delivery with two holes)
+- **Files:** `manifest.py` (masks, BOM, per-row box completeness, empty codes, metres per class and hole, row scale check), `tiling.py` (mask-aware tiling, `rock_fraction`, `min_rock_fraction`, `dropped_tiles.csv`), `labels.py` (`contact_buffer_m`), `features/descriptors.py` (`use_mask`), `splits.py` (`val_from_train`, two-hole leave-one-hole-out), `evaluate.py` (depth-block bootstrap, `label_counts`, within-hole validation note), `diagnostics.py` + `corelog inspect` / `compare-tiling`, `synthetic.make_rock_only_dataset`, `configs/lab.two_holes.example.yaml`, `configs/rock_only_synthetic.yaml`, `docs/LAB_RUNBOOK.md`
+- **Tests:** `tests/test_stage5_rock_only_two_holes.py` (18 tests, synthetic rock-only delivery with two holes)
 - **Results:** all pass, and the 38 earlier tests and the smoke test are unchanged.
   - A CSV that starts with a byte-order mark now validates.
   - Masks are resolved from a column or a template and size-checked, and they follow the flip, trim and resize of the image.
@@ -84,6 +84,7 @@ All tests use **synthetic data only** (`corelog.synthetic`: 4 synthetic holes SY
   - The validation block lies inside the training hole with the buffer respected, and the test hole stays whole.
   - The bootstrap resamples depth blocks when there is one test hole.
   - End to end on two synthetic holes: tiles, labels, inspect, masked features, SOM, training, evaluation and the predicted log all run, and every output is stamped SYNTHETIC.
+- **Tile-geometry comparison (added after the lab command dry run):** on synthetic full-height rows, the paper's 60×300 tiles produced no tiles at all. Each row shrinks to 60 px high, so it needs a length/height ratio ≥ 5. The default stays 60×300 (paper reference); `configs/experiments/tiles_128.yaml` is an optional alternative. `make-tiles` now writes `tiles/rows_tiling.csv` (per row: size, ratio, windows, kept tiles, rock covered) and explains a no-tiles failure. `inspect` writes `reports/tiling_summary.json`, and `corelog compare-tiling` tabulates two geometries: tiles generated and kept, % rows with zero tiles, rock-mask coverage, metres per tile, and % ambiguous labels by cause. Tests: 4 more (18 in stage 5).
 - **Limitations:**
   - Within-hole validation is not independent; it is used only for early stopping.
   - With two holes, every result describes one held-out hole. There is no estimate of between-hole variation.

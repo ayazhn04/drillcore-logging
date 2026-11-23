@@ -123,6 +123,38 @@ corelog inspect -c configs/lab.yaml --sheets 24
 - A warning that **median rock fraction differs strongly between labels**: the CNN could then learn piece outlines instead of rock.
 - Open `reports/tile_sheets/*.png`. Is the core visible at a useful resolution? Does the label match what you see? Are there leftovers of the black background, tags or wrap?
 
+## 5b. Compare tile geometries (no training)
+
+60×300 px (paper reference, `configs/base.yaml`) stays the default. 128×128 px (`configs/experiments/tiles_128.yaml`) is an optional alternative. Both are tiled, labelled and inspected **into separate output folders**, then compared. Nothing is trained.
+
+The 60×300 run is the one from section 5 (`<OUT_ROOT>`). The 128×128 run:
+```bash
+corelog make-tiles -c configs/lab.yaml -c configs/experiments/tiles_128.yaml --set paths.output_root=<OUT_ROOT>_t128
+```
+```bash
+corelog make-labels -c configs/lab.yaml -c configs/experiments/tiles_128.yaml --set paths.output_root=<OUT_ROOT>_t128
+```
+```bash
+corelog inspect -c configs/lab.yaml -c configs/experiments/tiles_128.yaml --set paths.output_root=<OUT_ROOT>_t128 --sheets 24
+```
+Compare:
+```bash
+corelog compare-tiling <OUT_ROOT> <OUT_ROOT>_t128 --out <OUT_ROOT>/reports/compare_tiling.md
+```
+If `make-tiles` stops with "no tiles produced" for 60×300, keep its message: it gives the row length-to-height ratios and how many rows are too short. `tiles/rows_tiling.csv` and `tiles/tiling_run.json` are written anyway, so `compare-tiling` still reports that geometry (zero tiles, % rows with zero windows). Skip `make-labels` and `inspect` for a geometry that produced no tiles.
+
+**CHECK 7e:** for each geometry, from `compare_tiling.md` and `tiles/rows_tiling.csv`:
+
+| Metric | Where it comes from |
+|---|---|
+| Number of generated tiles (and kept after the rock filter) | `tiles generated`, `tiles kept` |
+| Percentage of rows producing zero tiles | `rows with zero windows (%)` (geometry), `rows with zero kept tiles (%)` (after the rock filter) |
+| Rock-mask coverage | `tile rock fraction p05/p50/p95`; `row rock inside kept tiles (%)` (share of the rows' rock that ends up in some tile) |
+| Physical depth per tile | `metres per tile p05/p50/p95`; `photographed depth inside kept tiles (%)` |
+| Proportion of ambiguous lithology labels | `ambiguous (unlabeled) tiles (%)`, split into mixed at a contact, within the contact buffer, and unlogged/unmapped |
+
+Also compare the tile sheets of both folders by eye. Decide the geometry before any training; it is not chosen on a test hole.
+
 ## 6. Pilot (small, minutes)
 
 Purpose: to check that the pipeline runs on real data and that numbers are plausible. **This is not the experiment.** Keep `max_steps_per_epoch` unset, and use few epochs.
@@ -155,11 +187,7 @@ corelog evaluate -c configs/lab.yaml <OUT_ROOT>/runs/pilot_f2_baseline
 - `predict-log`: predicted intervals versus journal intervals, and the depth-weighted agreement.
 - Seconds per epoch on the GPU.
 
-Tile geometry is the decision to test next. With 60 px high tiles, a full-height row image is shrunk many times, and texture may be lost. One comparison run:
-```bash
-corelog make-tiles -c configs/lab.yaml --set paths.output_root=<OUT_ROOT>_t128 --set tiling.tile_height=128 --set tiling.tile_width=128 --set tiling.stride=128
-```
-Then run `make-labels`, `inspect --sheets 24` and the same fold-1 training, each with `--set paths.output_root=<OUT_ROOT>_t128 --set "model.input_size=[128, 128]"`.
+If section 5b chose 128×128, add `-c configs/experiments/tiles_128.yaml --set paths.output_root=<OUT_ROOT>_t128` to every pilot command.
 
 Optional SOM check (paper workflow, short):
 ```bash
@@ -194,8 +222,8 @@ It must show no files from `<OUT_ROOT>` or `<DATASET_ROOT>`. Share results as th
 | 7b | labelled tiles class × split; unlabeled share | |
 | 7c | journal intervals per class in train and test | |
 | 7d | visual check of tile sheets (resolution, label plausibility, leftovers) | |
+| 7e | 60×300 vs 128×128: tiles generated/kept, % rows with zero tiles, rock coverage, metres per tile, % ambiguous labels (`compare_tiling.md`) | |
 | 8 | pilot fold 1 and fold 2: best epoch, macro-F1, per-class recall, majority baseline, bootstrap CI | |
 | 8a | depth-weighted agreement of the predicted log | |
 | 8b | seconds per epoch | |
-| 8c | 60×300 versus 128×128 tiles: macro-F1, tile sheets | |
 | 9 | SOM node purity against the journal (optional) | |
