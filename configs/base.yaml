@@ -19,6 +19,10 @@ tiling:
   min_last_fraction: 0.5          # keep a trailing partial window if >= this fraction (shifted back, no padding)
   trim_fraction: 0.0              # trim this fraction of row length at each end (paper: 0.05 per photo side)
   image_format: png
+  # Rock masks (white = rock), same size as each image. Either a `mask_path` column in rows.csv
+  # or a template, e.g. "masks/{image_subdir}/{image_stem}_mask.png" (see manifest.mask_path_for).
+  mask_template: null
+  min_rock_fraction: 0.0          # with masks: tiles with less rock than this are not written (dropped_tiles.csv)
 
 labels:
   # Fixed, ordered list of model classes -> stable class indices (audit DL-3).
@@ -27,6 +31,7 @@ labels:
   # Codes not listed here are reported by `corelog validate` and treated as unlabeled.
   class_map: {}
   min_purity: 0.8                 # a tile gets a log label only if >= 80 % of its depth span has that class
+  contact_buffer_m: 0.0           # widen each tile by this on both sides for the purity test (uncertain row depths)
   unlabeled: unlabeled
 
 features:
@@ -40,6 +45,7 @@ features:
     bins: 8                       # 8x8x8 = 512-bin RGB histogram
     normalize: minmax             # none | minmax (paper text) | equalize (authors' code)
     pca_components: 48            # paper: 48
+  use_mask: auto                  # auto (use tile masks if present) | true | false
   n_jobs: 1
 
 som:
@@ -58,6 +64,9 @@ split:
   val_holes: []
   test_holes: []
   fold: 0                         # for leave_one_hole_out: index of the held-out test hole
+  # Few holes: validation = one depth block inside each training hole, with a buffer.
+  # e.g. {fraction: 0.2, buffer_m: 2.0, position: 1.0}; leave val_holes empty. null = off.
+  val_from_train: null
   label_source: log               # log | som | log_then_som
 
 model:
@@ -100,6 +109,7 @@ mean_teacher:
 evaluation:
   exclude_classes_for_summary: [non_core]
   bootstrap: 1000
+  block_length_m: 2.0             # depth-block bootstrap when there are fewer than 3 test holes
 
 inference:
   smoothing_window_tiles: 1       # moving average of class probabilities along depth (1 = none)

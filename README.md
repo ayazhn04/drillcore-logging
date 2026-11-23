@@ -63,17 +63,19 @@ corelog predict-log -c configs/lab.yaml outputs/runs/<run> --holes HOLE_A
 |---|---|
 | [docs/DATASET_MANIFEST.md](docs/DATASET_MANIFEST.md) | **Research assistants:** how to deliver photos and journals |
 | [docs/INSTALL.md](docs/INSTALL.md) | Ubuntu GPU setup, laptop setup, WSL appendix, reproducibility |
+| [docs/LAB_RUNBOOK.md](docs/LAB_RUNBOOK.md) | **First real-data run:** copy-paste commands for two holes and rock-only deliveries, with an observation sheet |
 | [docs/WORKFLOW.md](docs/WORKFLOW.md) | Step-by-step lab procedure: validate, tiles, SOM, training, evaluation, logs |
 | [docs/IMPLEMENTATION_PLAN.md](docs/IMPLEMENTATION_PLAN.md) | Design decisions, deviations from the paper, stage test reports, next steps |
 | [docs/REPRODUCTION_AUDIT.md](docs/REPRODUCTION_AUDIT.md) | Audit of the paper and the authors' code, with numerical evidence |
 
 ## Repository layout
 ```
-configs/        base.yaml (all parameters), smoke.yaml, lab.example.yaml, experiments/*.yaml
+configs/        base.yaml (all parameters), smoke.yaml, lab.example.yaml, lab.two_holes.example.yaml,
+                rock_only_synthetic.yaml (tests), experiments/*.yaml
 src/corelog/    config, manifest, images, tiling, labels, splits, synthetic,
                 features/ (Gabor, colour), som/ (SOM + labelling), data/ (dataset, augmentation),
                 models/ (baseline CNN, VGG16), train/ (supervised, mean_teacher),
-                evaluate.py, inference.py (depth logs), cli.py
+                evaluate.py, inference.py (depth logs), diagnostics.py (inspect), cli.py
 tests/          unit tests per stage + end-to-end smoke test (synthetic data only)
 docs/           documentation and RA templates
 scripts/        setup_ubuntu.sh

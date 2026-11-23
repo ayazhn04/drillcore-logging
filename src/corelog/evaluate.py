@@ -3,7 +3,10 @@ confusion matrix, per-hole results, summary without trivial classes (non_core), 
 bootstrap confidence intervals.
 
 Bootstrap note: tiles from one hole are spatially autocorrelated, so tile-level CIs are
-too narrow. When >= 3 test holes exist, holes are resampled instead.
+too narrow. When >= 3 test holes exist, holes are resampled. With fewer test holes,
+contiguous depth blocks of `evaluation.block_length_m` are resampled (block bootstrap).
+That is still optimistic when one journal interval spans many blocks, and it says nothing
+about other holes: with one test hole the result describes that hole only.
 """
 from __future__ import annotations
 
@@ -38,21 +41,31 @@ def metrics(y: np.ndarray, p: np.ndarray, classes: list[str]) -> dict:
                               "support": int(sup[i])} for i, c in enumerate(classes)}}
 
 
-def bootstrap(df: pd.DataFrame, classes: list[str], n: int, seed: int) -> dict:
+def bootstrap(df: pd.DataFrame, classes: list[str], n: int, seed: int, block_length_m: float | None = None) -> dict:
     rng = np.random.default_rng(seed)
     holes = df["hole_id"].unique()
     by_hole = len(holes) >= 3
+    by_block = not by_hole and bool(block_length_m) and "depth_from_m" in df
+    if by_block:
+        blk = df["hole_id"].astype(str) + "#" + (df["depth_from_m"] // float(block_length_m)).astype(int).astype(str)
+        groups = [g.index.to_numpy() for _, g in df.groupby(blk)]
     acc, mf1 = [], []
     for _ in range(n):
         if by_hole:
             pick = rng.choice(holes, len(holes), replace=True)
             s = pd.concat([df[df["hole_id"] == h] for h in pick])
+        elif by_block:
+            pick = rng.integers(0, len(groups), len(groups))
+            s = df.loc[np.concatenate([groups[i] for i in pick])]
         else:
             s = df.iloc[rng.integers(0, len(df), len(df))]
         acc.append(accuracy_score(s["y"], s["pred"]))
         mf1.append(f1_score(s["y"], s["pred"], labels=list(range(len(classes))), average="macro", zero_division=0))
     q = lambda v: [float(np.percentile(v, 2.5)), float(np.percentile(v, 97.5))]
-    return {"unit": "hole" if by_hole else "tile (optimistic: autocorrelated)", "n": n,
+    unit = ("hole" if by_hole else
+            f"depth block {block_length_m} m (fewer than 3 test holes; describes these holes only)" if by_block
+            else "tile (optimistic: autocorrelated)")
+    return {"unit": unit, "n": n, "n_blocks": len(groups) if by_block else None,
             "accuracy_95ci": q(acc), "macro_f1_95ci": q(mf1)}
 
 
@@ -83,6 +96,10 @@ def evaluate_run(run_dir: str | Path, current_cfg: dict | None = None, split: st
     res["per_hole"] = {h: {"n": len(g), "accuracy": float(accuracy_score(g["y"], g["pred"]))} for h, g in df.groupby("hole_id")}
     nb = cfg.get("evaluation", {}).get("bootstrap", 0)
     if nb:
-        res["bootstrap"] = bootstrap(df, classes, nb, cfg["project"]["seed"])
+        res["bootstrap"] = bootstrap(df, classes, nb, cfg["project"]["seed"],
+                                     cfg.get("evaluation", {}).get("block_length_m"))
+    if split == "val" and cfg["split"].get("val_from_train"):
+        res["note"] = "validation is a depth block inside the training hole(s): not an independent result"
+    res["label_counts"] = {classes[i]: int((df["y"] == i).sum()) for i in range(len(classes))}
     (out / "metrics.json").write_text(json.dumps(res, indent=2))
     return res

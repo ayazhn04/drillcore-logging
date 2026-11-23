@@ -1,0 +1,65 @@
+# TEMPLATE for the first real-data runs with TWO drill holes and a rock-only, pre-cropped
+# delivery (one image per core row, black background, separate rock masks).
+# Copy to configs/lab.yaml (git-ignored) on the lab machine and replace every placeholder.
+# Never commit the filled-in copy: it contains company hole IDs, codes and paths.
+#
+#   cp configs/lab.two_holes.example.yaml configs/lab.yaml
+#   corelog validate -c configs/lab.yaml
+#
+# Fold 1 below trains on HOLE_A and tests on HOLE_B. Fold 2 swaps them:
+#   corelog train -c configs/lab.yaml --set "split.train_holes=[HOLE_B]" --set "split.test_holes=[HOLE_A]"
+# or use mode leave_one_hole_out with --set split.fold=0 / 1.
+
+paths:
+  data_root: /path/to/dataset_root             # folder with manifests/, photos/, masks/
+  output_root: /path/to/local_disk/corelog_outputs  # local disk, outside the git checkout
+  rows_manifest: manifests/rows.csv
+  log_intervals: manifests/log_intervals.csv   # or manifests/log_<attribute>.csv for another attribute
+
+tiling:
+  # Rows are already cropped (x0..y1 empty). Masks: masks/<hole>/<row>_mask.png beside photos/<hole>/<row>.png
+  mask_template: "masks/{image_subdir}/{image_stem}_mask.png"
+  min_rock_fraction: 0.3        # PILOT VALUE: check the rock-fraction quantiles from `corelog inspect`
+  tile_height: 60               # paper geometry; compare with a larger tile in the pilot (see runbook)
+  tile_width: 300
+  stride: 300
+
+labels:
+  # One class per journal code group, agreed with the geologists. No non_core class:
+  # tray, tags and empty floor were removed by the masks. Check codes in manifests/codes.csv.
+  classes: [class_1, class_2, class_3]
+  class_map:
+    CODE_1: class_1
+    CODE_2: class_2
+    CODE_3: class_3
+    # CODE_4: class_3            # merge rare codes, or leave them out (-> unlabeled)
+  min_purity: 0.8
+  contact_buffer_m: 0.10        # PILOT VALUE: row depths were estimated; tiles near contacts -> unlabeled
+
+features:
+  use_mask: true                # descriptors ignore the black background
+
+split:
+  mode: holes
+  train_holes: [HOLE_A]
+  val_holes: []                 # two holes: validation comes from a depth block of the TRAIN hole
+  test_holes: [HOLE_B]
+  val_from_train:
+    fraction: 0.2               # deepest 20 % of the training hole...
+    buffer_m: 2.0               # ...with 2 m of tiles dropped between train and validation
+    position: 1.0               # 0 = shallowest block, 1 = deepest; move it if a class is missing from val
+
+model:
+  input_size: [60, 300]         # must equal [tile_height, tile_width]
+
+train:
+  device: cuda
+  num_workers: 8
+  class_weighting: balanced     # classes are unlikely to be balanced in two holes
+
+evaluation:
+  exclude_classes_for_summary: []
+  block_length_m: 2.0
+
+inference:
+  non_core_policy: keep         # there is no non_core class in this setup

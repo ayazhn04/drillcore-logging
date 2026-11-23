@@ -6,6 +6,7 @@ Typical lab sequence (see docs/WORKFLOW.md):
   corelog validate        -c configs/lab.yaml
   corelog make-tiles      -c configs/lab.yaml
   corelog make-labels     -c configs/lab.yaml
+  corelog inspect         -c configs/lab.yaml     (class x hole x split counts, rock fraction)
   corelog train           -c configs/lab.yaml [--mean-teacher]
   corelog evaluate        -c configs/lab.yaml outputs/runs/<run>
   corelog predict-log     -c configs/lab.yaml outputs/runs/<run> [--holes H1 H2]
@@ -34,15 +35,18 @@ def cmd_env(a):
 
 
 def cmd_validate(a):
+    import pandas as pd
+
     from . import manifest, splits
     from .config import classes, data_path, data_root, output_root
     cfg = _cfg(a)
     rows = manifest.read_rows(data_path(cfg, "rows_manifest"))
     lp = data_path(cfg, "log_intervals")
     logs = manifest.read_logs(lp) if lp.exists() else None
-    rep = manifest.validate(rows, logs, data_root(cfg), cfg["labels"].get("class_map", {}),
-                            check_images=not a.no_images)
     cls = classes(cfg)
+    rep = manifest.validate(rows, logs, data_root(cfg), cfg["labels"].get("class_map", {}),
+                            check_images=not a.no_images, mask_template=cfg["tiling"].get("mask_template"),
+                            classes=cls)
     bad = set(cfg["labels"].get("class_map", {}).values()) - set(cls)
     if bad:
         rep.errors.append(f"labels.class_map maps to classes not in labels.classes: {sorted(bad)}")
@@ -58,10 +62,27 @@ def cmd_validate(a):
         rep.errors.append(f"split: {e}")
     out = output_root(cfg) / "reports" / "validation.md"
     out.parent.mkdir(parents=True, exist_ok=True)
+    if logs is not None and all(c in logs for c in manifest.LOGS_REQUIRED):
+        try:
+            r2, l2 = rows.copy(), logs.copy()
+            for d in (r2, l2):
+                for c in ("depth_from_m", "depth_to_m"):
+                    d[c] = pd.to_numeric(d[c], errors="coerce")
+            manifest.class_metres(r2, l2, cfg["labels"].get("class_map", {})).to_csv(
+                out.parent / "class_metres_by_hole.csv", index=False)
+        except Exception as e:  # noqa: BLE001
+            rep.warnings.append(f"class metres table not written: {e}")
     out.write_text(rep.to_markdown(), encoding="utf-8")
     print(rep.to_markdown())
     print(f"report written to {out}")
     return 0 if rep.ok else 1
+
+
+def cmd_inspect(a):
+    from .diagnostics import inspect
+    r = inspect(_cfg(a), a.min_tiles, a.min_intervals, a.sheets)
+    print(open(r["report"], encoding="utf-8").read())
+    print(f"report written to {r['report']}")
 
 
 def cmd_tiles(a):
@@ -206,6 +227,11 @@ def build_parser() -> argparse.ArgumentParser:
         "--no-images", action="store_true", help="skip opening image files (fast)")
     add("make-tiles", cmd_tiles, "cut rows into depth-registered tiles")
     add("make-labels", cmd_labels, "label tiles from the geological journals")
+    s = add("inspect", cmd_inspect, "class x hole x split counts, rock fraction, geometry (after make-labels)")
+    s.add_argument("--min-tiles", type=int, default=30)
+    s.add_argument("--min-intervals", type=int, default=3)
+    s.add_argument("--sheets", type=int, default=0, metavar="N",
+                   help="write reports/tile_sheets/<label>.png with N random tiles per label")
     add("extract-features", cmd_features, "Gabor + colour descriptors for SOM")
     add("som-train", cmd_som_train, "train the SOM and assign tiles to nodes")
     add("som-sheets", cmd_som_sheets, "export node contact sheets + labelling template")

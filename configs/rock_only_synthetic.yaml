@@ -1,0 +1,51 @@
+# Synthetic rock-only, two-hole configuration (tests only; mirrors configs/lab.two_holes.example.yaml).
+# data_root/output_root are set by the tests.
+tiling:
+  tile_height: 60
+  tile_width: 60
+  stride: 60
+  mask_template: "masks/{image_subdir}/{image_stem}_mask.png"
+  min_rock_fraction: 0.3
+
+labels:
+  classes: [syn_class_1, syn_class_2, syn_class_3]   # synthetic, not geological; no non_core class
+  class_map: {S1: syn_class_1, S2: syn_class_2, S3: syn_class_3}
+  contact_buffer_m: 0.05
+
+features:
+  gabor:
+    frequencies: [0.09, 0.17, 0.3]
+  color:
+    pca_components: 8
+
+som:
+  grid: [3, 3]
+  iterations: 2000
+  thumbnails_per_node: 4
+
+split:
+  mode: holes
+  train_holes: [SYN_A]
+  val_holes: []
+  test_holes: [SYN_B]
+  val_from_train: {fraction: 0.25, buffer_m: 0.5, position: 1.0}
+
+model:
+  input_size: [60, 60]
+
+train:
+  device: cpu
+  epochs: 2
+  lr: 1.0e-3
+  batch_size: 8
+  num_workers: 0
+  patience: 5
+  max_steps_per_epoch: 4
+
+mean_teacher:
+  unlabeled_batch_size: 8
+  rampup_epochs: 1
+
+evaluation:
+  bootstrap: 50
+  block_length_m: 1.0

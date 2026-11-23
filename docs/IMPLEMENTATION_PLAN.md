@@ -71,8 +71,26 @@ All tests use **synthetic data only** (`corelog.synthetic`: 4 synthetic holes SY
 - **Results:** all pass. Interval merging, the three non-core policies, short-interval absorption (with guaranteed termination) and gap handling work. Depth-weighted agreement is checked against a hand-computed 0.75. `validate` returns exit code 1 on a broken dataset. A trained model evaluated through `evaluate_run`/`predict_log` scores above chance on the held-out hole (accuracy > 0.6, journal agreement > 0.5), which checks label/prediction alignment along the whole path. `corelog smoke-test` runs all 13 steps in about 9 s on the laptop CPU.
 - **Limitations:** bootstrap CIs with fewer than 3 test holes are tile-level and therefore optimistic (labelled as such in the output). No plotting of strip logs yet (CSV only).
 
+### Stage 5: Rock-only deliveries and two-hole splits
+*Added 2026-11-23, after reading the RAs' delivery documentation. No real data was used; the delivery itself was not available on the development laptop.*
+- **Files:** `manifest.py` (masks, BOM, per-row box completeness, empty codes, metres per class and hole, row scale check), `tiling.py` (mask-aware tiling, `rock_fraction`, `min_rock_fraction`, `dropped_tiles.csv`), `labels.py` (`contact_buffer_m`), `features/descriptors.py` (`use_mask`), `splits.py` (`val_from_train`, two-hole leave-one-hole-out), `evaluate.py` (depth-block bootstrap, `label_counts`, within-hole validation note), `diagnostics.py` + `corelog inspect`, `synthetic.make_rock_only_dataset`, `configs/lab.two_holes.example.yaml`, `configs/rock_only_synthetic.yaml`, `docs/LAB_RUNBOOK.md`
+- **Tests:** `tests/test_stage5_rock_only_two_holes.py` (14 tests, synthetic rock-only delivery with two holes)
+- **Results:** all pass, and the 38 earlier tests and the smoke test are unchanged.
+  - A CSV that starts with a byte-order mark now validates.
+  - Masks are resolved from a column or a template and size-checked, and they follow the flip, trim and resize of the image.
+  - Low-rock tiles are dropped and listed.
+  - With a 0.10 m contact buffer, a tile 5 cm from a contact becomes unlabeled. *Found during testing:* a purity test on the widened span did not do this for long tiles, so the rule is now strict.
+  - Masked descriptors: the black background adds no histogram mass, and the piece outline changes the Gabor features at most half as much as without the mask.
+  - The validation block lies inside the training hole with the buffer respected, and the test hole stays whole.
+  - The bootstrap resamples depth blocks when there is one test hole.
+  - End to end on two synthetic holes: tiles, labels, inspect, masked features, SOM, training, evaluation and the predicted log all run, and every output is stamped SYNTHETIC.
+- **Limitations:**
+  - Within-hole validation is not independent; it is used only for early stopping.
+  - With two holes, every result describes one held-out hole. There is no estimate of between-hole variation.
+  - The class balance, tile geometry and px/m of the real delivery are unknown until `validate` and `inspect` run on the lab machine.
+
 ## Remaining work (after RA delivery)
-1. **P0 decisions:** class scheme and `class_map` with the geologists; which journal attribute(s) to model; final hole split (with 4 holes: 4-fold leave-one-hole-out).
+1. **P0 decisions:** class scheme and `class_map` with the geologists; which journal attribute(s) to model; hole split. **The first delivery has two holes:** 2 folds (train one hole, test the other), validation from a buffered depth block of the training hole (`split.val_from_train`). Four-fold leave-one-hole-out is not possible yet.
 2. **Dataset QA:** run `validate`, inspect tiles per hole, check class balance and the share of unlabeled tiles.
 3. **Baselines on the GPU:** baseline CNN, VGG16 (60×300 and 224), each over 4 folds × ≥ 3 seeds.
 4. **Paper replication on our data:** SOM labelling by our geologists, scored against the journals; training on SOM labels vs journal labels.
