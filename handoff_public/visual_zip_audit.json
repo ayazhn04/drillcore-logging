@@ -1,0 +1,15 @@
+{
+  "path": "/media/ra/KINGSTON/drillcore-logging-work/diagnostics/bassgold_visual_review.zip",
+  "present": true,
+  "repository_path": "review_artifacts/bassgold_visual_review.zip",
+  "member_count": 28,
+  "groups": {
+    "128x128": 14,
+    "60x300_weighted": 14
+  },
+  "crc_check": "PASS",
+  "size_bytes": 9941721,
+  "sha256": "99cf6148cbf23f45a31cd182d41641a18b30d0f4336fc82e79aa3ecebd4053f7",
+  "git_blob_matches_checkout": true,
+  "git_blob_sha": "92e1b7e3ab9b8dfd34149d245a3bc342260be22f"
+}
